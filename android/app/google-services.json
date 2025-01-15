@@ -1,0 +1,49 @@
+{
+  "project_info": {
+    "project_number": "1009422359876",
+    "firebase_url": "https://convenyorsystem-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "convenyorsystem",
+    "storage_bucket": "convenyorsystem.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1009422359876:android:3ee9a61d3c45beca780b11",
+        "android_client_info": {
+          "package_name": "com.example.convenyor_system"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDKP39vQtkG0gI1_WiXdUv5725GauGtM_4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1009422359876:android:3aaf3b67efdf5000780b11",
+        "android_client_info": {
+          "package_name": "vawnwuyest.conveyor_system"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDKP39vQtkG0gI1_WiXdUv5725GauGtM_4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
