@@ -11,6 +11,3 @@ WORKDIR /app
 COPY . .
 
 RUN flutter pub get
-
-# Build APK (release)
-RUN flutter build apk --release

@@ -1,5 +1,6 @@
+import 'package:convenyor_system/config.dart';
 import 'package:firebase_database/firebase_database.dart';
-
+enum ColorLimit { none, blue, red, yellow }
 class FirebaseService {
   final DatabaseReference dbRef = FirebaseDatabase.instance.ref();
 
@@ -11,6 +12,21 @@ class FirebaseService {
       print("Error updating autoMode: $e");
     }
   }
+
+  String colorLimitToString(ColorLimit color) {
+    return color.name; // Nếu bạn dùng Dart 2.15 trở lên
+  }
+
+  Future<void> updateColorLimit(ColorLimit color, int newValue) async {
+  try {
+    final colorKey = colorLimitToString(color);
+    await dbRef.child('limits').child(colorKey).set(newValue);
+    print("Updated $colorKey limit to $newValue");
+  } catch (e) {
+    print("Error updating $color limit: $e");
+  }
+}
+
 
   // Cập nhật trạng thái của motor
   Future<void> updateServo(String servo, bool status) async {
@@ -50,13 +66,40 @@ class FirebaseService {
       print("Error updating stats: $e");
     }
   }
+  // Cập nhật trạng thái không phát hiện màu sắc
+  Future<void> resetCurrentColor(String colorKey) async {
+    await dbRef.child('colors/current/$colorKey').set(0);
+    print("Reset current color $colorKey to 0");
+  }
 
+  Future<void> updateCurrentColor(String colorKey, int newValue) async {
+    try {
+      await dbRef.child('colors/current/$colorKey').set(newValue);
+      print("Updated current color $colorKey to $newValue");
+    } catch (e) {
+      print("Error updating current color: $e");
+    }
+  }
   // Thêm hàm reset thống kê
   Future<void> resetStats() async {
-    await dbRef.child('colors/red').set(0);
-    await dbRef.child('colors/blue').set(0);
-    await dbRef.child('colors/yellow').set(0);
-    await dbRef.child('colors/total').set(0);
+      await dbRef.child('colors').set({
+      'red': Config.defaultValue,
+      'blue': Config.defaultValue,
+      'yellow': Config.defaultValue,
+      'total': Config.defaultValue,
+      'notDetect': false,
+      'current': {
+        'red': Config.defaultValue,
+        'blue': Config.defaultValue,
+        'yellow': Config.defaultValue,
+      }
+    });
+    await dbRef.child('limits').set({
+      'red': Config.defaultLimit,
+      'blue': Config.defaultLimit,
+      'yellow': Config.defaultLimit});
+    
+    print("Reset Successfully");
   }
 
   // Lắng nghe thay đổi thống kê
@@ -72,7 +115,7 @@ class FirebaseService {
     });
   }
 
- Stream<String> listenToColorDetected() {
+  Stream<String> listenToColorDetected() {
     var colorRef = dbRef.child("sensor/colorDetected");
     return colorRef.onValue.map((event) {
       // Kiểm tra nếu có dữ liệu và trả về màu sắc
@@ -95,4 +138,25 @@ class FirebaseService {
       }
     });
   }
+
+  Stream<Map<String, dynamic>> listenToCurrent() {
+    return dbRef.child('colors/current').onValue.map((event) {
+      final data = event.snapshot.value as Map?;
+      if (data == null) return {};
+      return data.map((key, value) => MapEntry(key.toString(), value ?? 0));
+    });
+  }
+  
+  Stream<Map<String, dynamic>> listenToLimitStats() {
+     return dbRef.child('limits').onValue.map((event) {
+      final data = event.snapshot.value as Map?;
+      return {
+        "red": data?['red'] ?? 0,
+        "blue": data?['blue'] ?? 0,
+        "yellow": data?['yellow'] ?? 0
+      };
+    });
+  }
+
+
 }

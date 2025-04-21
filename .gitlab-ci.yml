@@ -1,73 +1,21 @@
+image: cirrusci/flutter:stable
 
-variables:
-    DEPLOY_ENV: production
-    DEPLOY_USER: deployer
-    DEPLOY_SERVER: example.com
-    DEPLOY_PATH: /var/www/html
-    GIT_STRATEGY: clone
-    GIT_SUBMODULE_STRATEGY: recursive
-stages: 
+stages:
   - build
   - deploy
-  - mornitoring
 
-build:
+before_script:
+  - flutter pub get
+
+build_apk:
   stage: build
   script:
-    - echo "Building the project..."
-    - echo "Build completed!"
+    - echo "Building APK..."
+    - chmod +x build.sh   # Cấp quyền chạy file nếu cần
+    - ./build.sh          # Chạy script
+    - flutter build apk --release
+    - echo "APK built successfully."
   artifacts:
     paths:
-      - build_output/
+      - build/app/outputs/flutter-apk/app-release.apk
     expire_in: 1 week
-  only:
-    - master
-    - merge_requests
-
-deploy:
-  stage: deploy
-  script:
-    - echo "Deploying the project..."
-    - echo "Deployment completed!"
-  environment:
-    name: production
-    url: https://example.com
-  only:
-    - master
-    - merge_requests
-  except:
-    - tags
-  when: manual
-  allow_failure: false
-  dependencies:
-    - build
-
-  before_script:
-    - echo "Setting up deployment environment..."
-    - echo "Environment setup completed!"
-  after_script:
-    - echo "Cleaning up after deployment..."
-    - echo "Cleanup completed!"
-
-minitoring:
-  stage: monitoring
-  script:
-    - echo "Monitoring the deployment..."
-    - echo "Monitoring completed!"
-  only:
-    - master
-    - merge_requests
-  except:
-    - tags
-  when: manual
-  allow_failure: false
-  dependencies:
-    - deploy
-  before_script:
-    - echo "Setting up monitoring environment..."
-    - echo "Environment setup completed!"
-  after_script:
-    - echo "Cleaning up after monitoring..."
-    - echo "Cleanup completed!"
-
-  

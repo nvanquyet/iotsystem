@@ -1,8 +1,10 @@
+import 'package:convenyor_system/config.dart';
 import 'package:convenyor_system/screens/login_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:convenyor_system/services/firebase_service.dart';
-import 'package:convenyor_system/Widgets/PieChartCircle.dart';
+import 'package:convenyor_system/Widgets/PieChartCircle.dart' show ColorStats, PieChartCircle;
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 class ConveyorSystem extends StatefulWidget {
   const ConveyorSystem({Key? key}) : super(key: key);
@@ -12,58 +14,77 @@ class ConveyorSystem extends StatefulWidget {
 }
 
 class _ConveyorSystemState extends State<ConveyorSystem> {
+
+// ========================= Variable =======================
   final FirebaseService _firebaseService = FirebaseService();
+  final FlutterLocalNotificationsPlugin _notificationsPlugin = FlutterLocalNotificationsPlugin();
   
-  // Cấu trúc dữ liệu
+  // Data structure
   bool _isAutoMode = false;
   String _colorDetected = "0xFF000000";
-  Map<String, dynamic> _stats = {
-    "red": 0, 
-    "blue": 0, 
-    "yellow": 0, 
-    "green": 0, 
-    "total": 0,
-    "limits": {"red": 10, "blue": 10, "yellow": 10, "green": 10}
+
+// ======================= Mapping =========================
+ 
+ // Mapping for color keys
+  final Map<ColorLimit, String> colorKeyMap = {
+    ColorLimit.red: "red",
+    ColorLimit.blue: "blue",
+    ColorLimit.yellow: "yellow",
   };
   
-  // Controllers cho input giới hạn
-  final TextEditingController _redLimitController = TextEditingController(text: "10");
-  final TextEditingController _blueLimitController = TextEditingController(text: "10");
-  final TextEditingController _yellowLimitController = TextEditingController(text: "10");
-  final TextEditingController _greenLimitController = TextEditingController(text: "10");
+  Map<String, dynamic> _stats = {
+    "red": Config.defaultValue, 
+    "blue": Config.defaultValue, 
+    "yellow": Config.defaultValue,
+    "total": Config.defaultValue,
+  };
 
-  // Định nghĩa thông tin màu sắc để dễ sử dụng
-  final Map<String, ColorInfo> _colorInfo = {
-    "red": ColorInfo(
+  Map<String, dynamic> _currentStats = {
+    "red": Config.defaultValue, 
+    "blue": Config.defaultValue, 
+    "yellow": Config.defaultValue,
+  };
+
+  Map<String, dynamic> _limitStats = {
+    "red": Config.defaultLimit, 
+    "blue": Config.defaultLimit, 
+    "yellow": Config.defaultLimit
+  };
+  
+  final Map<String, TextEditingController> _limitControllers = {
+    "red": TextEditingController(text: Config.defaultLimit.toString()),
+    "blue": TextEditingController(text: Config.defaultLimit.toString()),
+    "yellow": TextEditingController(text: Config.defaultLimit.toString()),
+  };
+
+  // Color information definitions
+  final Map<ColorLimit, ColorInfo> _colorInfo = {
+    ColorLimit.red: ColorInfo(
       name: "Đỏ",
       color: Colors.red,
       servo: "servo1",
       colorCode: "0xFFFF0000",
     ),
-    "blue": ColorInfo(
+    ColorLimit.blue: ColorInfo(
       name: "Xanh dương",
       color: Colors.blue,
       servo: "servo3",
       colorCode: "0xFF0000FF",
     ),
-    "yellow": ColorInfo(
+    ColorLimit.yellow: ColorInfo(
       name: "Vàng",
       color: Colors.yellow,
       servo: "servo2",
       colorCode: "0xFFFFFF00",
     ),
-    "green": ColorInfo(
-      name: "Xanh lá",
-      color: Colors.green,
-      servo: "servo4",
-      colorCode: "0xFF00FF00",
-    ),
   };
 
+// ======================= State Life Circle =========================
   @override
   void initState() {
     super.initState();
     _setupListeners();
+    _initializeNotifications();
   }
 
   @override
@@ -72,36 +93,62 @@ class _ConveyorSystemState extends State<ConveyorSystem> {
     super.dispose();
   }
 
-  // Thiết lập các listeners
+
+// ======================= Notification =========================
+  // Initialize notifications
+  Future<void> _initializeNotifications() async {
+    const AndroidInitializationSettings initializationSettingsAndroid =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
+
+    const InitializationSettings initializationSettings = InitializationSettings(
+      android: initializationSettingsAndroid,
+    );
+
+    await _notificationsPlugin.initialize(
+      initializationSettings,
+    );
+  }
+
+  // Show notification when limits are reached in auto mode
+  Future<void> _showLimitNotification(String colorName) async {
+    const AndroidNotificationDetails androidPlatformChannelSpecifics =
+        AndroidNotificationDetails(
+      'limit_reached_channel',
+      'Limit Reached Notifications',
+      importance: Importance.max,
+      priority: Priority.high,
+    );
+
+    const NotificationDetails platformChannelSpecifics =
+        NotificationDetails(android: androidPlatformChannelSpecifics);
+
+    await _notificationsPlugin.show(
+      0,
+      'Cảnh báo giới hạn màu',
+      'Màu $colorName đã đạt giới hạn tối đa. Vui lòng kiểm tra hệ thống!',
+      platformChannelSpecifics,
+    );
+  }
+
+  // Set up listeners
   void _setupListeners() {
     _listenToAutoMode();
     _listenToStats();
     _listenToColorDetected();
+    _listenToCurrentColors();
+    _listenToLimitColors();
   }
 
-  // Giải phóng controllers
-  void _disposeControllers() {
-    _redLimitController.dispose();
-    _blueLimitController.dispose();
-    _yellowLimitController.dispose();
-    _greenLimitController.dispose();
-  }
 
-  // Các hàm listener
-  void _listenToStats() {
-    _firebaseService.listenToStats().listen((newStats) {
+
+// ======================= Listenning =========================
+  void _listenToCurrentColors() {
+    _firebaseService.listenToCurrent().listen((data) {
       setState(() {
-        _stats = newStats;
+        _currentStats = data;
         _updateLimitControllers();
       });
     });
-  }
-
-  void _updateLimitControllers() {
-    _redLimitController.text = (_stats["limits"]?["red"] ?? 10).toString();
-    _blueLimitController.text = (_stats["limits"]?["blue"] ?? 10).toString();
-    _yellowLimitController.text = (_stats["limits"]?["yellow"] ?? 10).toString();
-    _greenLimitController.text = (_stats["limits"]?["green"] ?? 10).toString();
   }
 
   void _listenToColorDetected() {
@@ -120,23 +167,53 @@ class _ConveyorSystemState extends State<ConveyorSystem> {
     });
   }
 
-  // Các hàm xác thực và kiểm tra
-  bool _isValidColor(String color) {
-    try {
-      int.parse(color);
-      return true;
-    } catch (e) {
-      return false;
+  void _listenToStats() {
+    _firebaseService.listenToStats().listen((newStats) {
+      setState(() {
+        _stats = newStats;
+        _updateLimitControllers();
+      });
+    });
+  }
+ void _listenToLimitColors() {
+     _firebaseService.listenToLimitStats().listen((newStats) {
+      setState(() {
+        _limitStats = newStats;
+        _updateLimitControllers();
+      });
+    });
+  }
+
+// ======================= Limit Value Control =========================
+  void _disposeControllers() {
+    _limitControllers.forEach((key, controller) {
+      controller.dispose();
+    });
+  }
+
+  void _updateLimitControllers() {
+    if(_isAutoMode){
+      for (final colorKey in ["red", "blue", "yellow"]) {
+        _limitControllers[colorKey]?.text = (_limitStats[colorKey] ?? 10).toString();
+        // If count increased and reached the limit in auto mode
+        if (_currentStats[colorKey] > _limitStats[colorKey]) {
+          // Show notification
+          final colorName = _getColorNameFromKey(colorKey);
+          _showLimitNotification(colorName);
+        }
+      }
     }
   }
 
-  bool _checkColorLimit(String color) {
-    int currentCount = _stats[color] ?? 0;
-    int limit = _stats["limits"]?[color] ?? 10;
-    return currentCount < limit;
-  }
 
-  // Các hàm xử lý tương tác
+// ======================= Action Functions =========================
+
+  // Reset color count in Firebase
+  Future<void> _resetColorCount(String colorKey) async {
+    await _firebaseService.resetCurrentColor(colorKey);
+    _showSnackBar("Đã đặt lại giá trị màu ${_getColorNameFromKey(colorKey)}!");
+  }
+  // Interaction handling functions
   Future<void> _toggleAutoMode() async {
     setState(() {
       _isAutoMode = !_isAutoMode;
@@ -144,12 +221,15 @@ class _ConveyorSystemState extends State<ConveyorSystem> {
     await _firebaseService.updateAutoMode(_isAutoMode);
   }
 
-  Future<void> _updateColorLimit(String color, int limit) async {
+  Future<void> _updateColorLimit(ColorLimit color, int limit) async {
     if (limit > 0) {
-      //await _firebaseService.updateColorLimit(color, limit);
+      // Convert from enum to string to save to Firebase
+      String colorKey = _firebaseService.colorLimitToString(color);
+      
+      await _firebaseService.updateColorLimit(color, limit);
       _showSnackBar("Giới hạn màu ${_colorInfo[color]?.name} đã được cập nhật thành $limit!");
       setState(() {
-        _stats["limits"][color] = limit;
+        _stats["limits"][colorKey] = limit;
       });
     } else {
       _showSnackBar("Giới hạn phải lớn hơn 0!");
@@ -162,32 +242,25 @@ class _ConveyorSystemState extends State<ConveyorSystem> {
       await _firebaseService.updateServo(servo, true);
       await Future.delayed(const Duration(seconds: 2));
       await _firebaseService.updateServo(servo, false);
-      await Future.delayed(const Duration(seconds: 1));
       await _firebaseService.updateMotor(false);
     }
   }
 
-  Future<void> _addColor(String color) async {
-    if (_checkColorLimit(color)) {
-      await _firebaseService.updateStats(color);
-    } else {
-      _showSnackBar("Đã đạt giới hạn tối đa cho màu ${_colorInfo[color]?.name}!");
-    }
-  }
-
-  Future<void> _detectColor(String colorKey) async {
+  Future<void> _detectColor(ColorLimit colorLimit) async {
+    String colorKey = _firebaseService.colorLimitToString(colorLimit);
     if (!_isValidColor(_colorDetected)) {
       _showSnackBar("Không thể phát hiện màu hợp lệ!");
       return;
     }
 
-    if (!_checkColorLimit(colorKey)) {
-      _showSnackBar("Đã đạt giới hạn tối đa cho màu ${_colorInfo[colorKey]?.name}!");
+    if (!_colorIsAvailable(colorKey)) {
+      _showSnackBar("Đã đạt giới hạn tối đa cho màu ${_colorInfo[colorLimit]?.name}! Hãy đặt lại giá trị trước khi tiếp tục.");
       return;
     }
 
-    await _runServo(_colorInfo[colorKey]!.servo);
-    await _addColor(colorKey);
+    await _runServo(_colorInfo[colorLimit]!.servo);
+    //Todo: Remove add color from application
+    //await _addColor(colorKey);
   }
 
   Future<void> _resetStats() async {
@@ -202,78 +275,143 @@ class _ConveyorSystemState extends State<ConveyorSystem> {
     );
   }
 
-  // Hiển thị SnackBar
+// ======================= Extension Functions =========================
+  // Validation and check functions
+  bool _isValidColor(String color) {
+    if(_colorDetected == "0x00000000") return false;
+    try {
+      int.parse(color);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  bool _colorIsAvailable(String color) {
+    int currentCount = _currentStats[color] ?? Config.defaultValue;
+    int limit = _limitStats[color] ?? Config.defaultLimit;
+    return currentCount < limit;
+  }
+
+  // Helper to get color name from string key
+  String _getColorNameFromKey(String colorKey) {
+    switch (colorKey) {
+      case "red": return _colorInfo[ColorLimit.red]?.name ?? "Đỏ";
+      case "blue": return _colorInfo[ColorLimit.blue]?.name ?? "Xanh dương";
+      case "yellow": return _colorInfo[ColorLimit.yellow]?.name ?? "Vàng";
+      default: return colorKey;
+    }
+  }
+
+  // Helper to map string key to ColorLimit
+  ColorLimit _getColorLimitFromKey(String colorKey) {
+    switch (colorKey) {
+      case "red": return ColorLimit.red;
+      case "blue": return ColorLimit.blue;
+      case "yellow": return ColorLimit.yellow;
+      default: return ColorLimit.red; // Default to red as fallback
+    }
+  }
+
+  // Display SnackBar
   void _showSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
+      SnackBar(
+        content: Text(message),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+        ),
+      ),
     );
   }
 
-  // Hiển thị dialog cập nhật giới hạn
+  void _onSaveColorLimit() {
+    _updateColorLimit(ColorLimit.red, int.tryParse(_limitControllers["red"]!.text) ?? Config.defaultLimit);
+    _updateColorLimit(ColorLimit.blue, int.tryParse(_limitControllers["blue"]!.text) ?? Config.defaultLimit);
+    _updateColorLimit(ColorLimit.yellow, int.tryParse(_limitControllers["yellow"]!.text) ?? Config.defaultLimit);
+
+    // TODO: emit event, call listener, notify parent, etc.
+    print("Đã lưu giới hạn màu thành công!");
+  }
+
   void _showLimitDialog() {
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text("Cập nhật giới hạn màu sắc"),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _buildLimitInput("Đỏ", _redLimitController, Colors.red),
-                const SizedBox(height: 12),
-                _buildLimitInput("Xanh dương", _blueLimitController, Colors.blue),
-                const SizedBox(height: 12),
-                _buildLimitInput("Vàng", _yellowLimitController, Colors.yellow),
-                const SizedBox(height: 12),
-                _buildLimitInput("Xanh lá", _greenLimitController, Colors.green),
-              ],
-            ),
+          title: const Text(
+            "Cập nhật giới hạn màu sắc",
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildLimitInput(ColorLimit.red, _limitControllers["red"]!, Colors.red, "Đỏ"),
+              const SizedBox(height: 12),
+              _buildLimitInput(ColorLimit.blue, _limitControllers["blue"]!, Colors.blue, "Xanh dương"),
+              const SizedBox(height: 12),
+              _buildLimitInput(ColorLimit.yellow, _limitControllers["yellow"]!, Colors.yellow, "Vàng"),
+            ],
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
               child: const Text("Hủy"),
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.grey[700],
+              ),
             ),
             ElevatedButton(
               onPressed: () {
-                _updateColorLimit("red", int.tryParse(_redLimitController.text) ?? 10);
-                _updateColorLimit("blue", int.tryParse(_blueLimitController.text) ?? 10);
-                _updateColorLimit("yellow", int.tryParse(_yellowLimitController.text) ?? 10);
-                _updateColorLimit("green", int.tryParse(_greenLimitController.text) ?? 10);
+                _onSaveColorLimit();
                 Navigator.of(context).pop();
               },
               child: const Text("Lưu"),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
             ),
           ],
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          contentPadding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+          actionsPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         );
       },
     );
   }
 
-  // Chuyển đổi thống kê thành danh sách ColorStats
+  // Convert stats to ColorStats list
   List<ColorStats> _getColorStats() {
     final total = (_stats["total"] ?? 0) > 0 ? _stats["total"] : 1;
-    
-    Map<String, double> percentages = {};
+
+    Map<ColorLimit, double> percentages = {};
     double totalPercentage = 0;
     
-    // Tính toán phần trăm cho mỗi màu
-    for (final colorKey in _colorInfo.keys) {
-      final percentage = (_stats[colorKey] ?? 0) * 100.0 / total;
-      percentages[colorKey] = percentage;
+    // Calculate percentage for each color
+    for (final entry in colorKeyMap.entries) {
+      final colorLimit = entry.key;
+      final dbKey = entry.value;
+      final percentage = (_stats[dbKey] ?? 0) * 100.0 / total;
+      percentages[colorLimit] = percentage;
       totalPercentage += percentage;
     }
     
-    // Nếu không có dữ liệu
+    // If no data
     if (totalPercentage == 0) {
       final defaultValue = 100.0 / _colorInfo.length;
       return _colorInfo.entries.map((entry) => 
-        ColorStats(entry.value.colorCode, _stats[entry.key] ?? 0, defaultValue)
+        ColorStats(entry.value.colorCode, _stats[colorKeyMap[entry.key]] ?? 0, defaultValue)
       ).toList();
     }
     
-    // Điều chỉnh tỷ lệ để tổng đúng 100%
+    // Adjust ratio to total exactly 100%
     if (totalPercentage != 100.0) {
       final factor = 100.0 / totalPercentage;
       for (final colorKey in percentages.keys) {
@@ -281,41 +419,45 @@ class _ConveyorSystemState extends State<ConveyorSystem> {
       }
     }
     
-    // Chuyển đổi thành danh sách ColorStats
+    // Convert to ColorStats list
     return _colorInfo.entries.map((entry) {
-      final colorKey = entry.key;
+      final colorLimit = entry.key;
       final colorData = entry.value;
-      final adjustedPercentage = double.parse(percentages[colorKey]!.toStringAsFixed(2));
-      return ColorStats(colorData.colorCode, _stats[colorKey] ?? 0, adjustedPercentage);
+      final dbKey = colorKeyMap[colorLimit]!;
+      final adjustedPercentage = double.parse(percentages[colorLimit]!.toStringAsFixed(2));
+      return ColorStats(colorData.colorCode, _stats[dbKey] ?? 0, adjustedPercentage);
     }).toList();
   }
 
-  // UI builders
-  Widget _buildLimitInput(String label, TextEditingController controller, Color color) {
+  // Wiget to build limit input field 
+  Widget _buildLimitInput(ColorLimit limit, TextEditingController controller, Color color, String label) {
     return Row(
       children: [
         Container(
-          width: 20,
-          height: 20,
+          width: 10,
+          height: 10,
           decoration: BoxDecoration(
             color: color,
-            borderRadius: BorderRadius.circular(4),
+            shape: BoxShape.circle,
           ),
-        ),
-        const SizedBox(width: 12),
-        Text(
-          "$label:",
-          style: const TextStyle(fontWeight: FontWeight.w500),
         ),
         const SizedBox(width: 8),
         Expanded(
+          child: Text(
+            label,
+            style: const TextStyle(fontSize: 14),
+          ),
+        ),
+        SizedBox(
+          width: 60,
+          height: 36,
           child: TextField(
             controller: controller,
             keyboardType: TextInputType.number,
+            textAlign: TextAlign.center,
             decoration: InputDecoration(
-              hintText: "Giới hạn",
+              contentPadding: const EdgeInsets.symmetric(vertical: 8),
               isDense: true,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
               ),
@@ -326,83 +468,116 @@ class _ConveyorSystemState extends State<ConveyorSystem> {
     );
   }
 
+  // Widget to build limit info in main widget
   Widget _buildLimitInfo(String colorKey) {
-    final colorData = _colorInfo[colorKey]!;
-    final current = _stats[colorKey] ?? 0;
-    final limit = _stats["limits"]?[colorKey] ?? 10;
+    final colorLimit = _getColorLimitFromKey(colorKey);
+    final colorData = _colorInfo[colorLimit]!;
+    final current = _currentStats[colorKey] ?? Config.defaultValue;
+    final limit = _limitStats[colorKey] ?? Config.defaultLimit;
     final bool isAtLimit = current >= limit;
-    
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.05),
-            blurRadius: 2,
+            blurRadius: 3,
             offset: const Offset(0, 1),
           ),
         ],
       ),
       child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Row(
-            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
-                width: 12,
-                height: 12,
+                width: 14,
+                height: 14,
                 decoration: BoxDecoration(
                   color: colorData.color,
-                  borderRadius: BorderRadius.circular(2),
+                  borderRadius: BorderRadius.circular(7),
                 ),
               ),
-              const SizedBox(width: 4),
+              const SizedBox(width: 6),
               Text(
                 colorData.name,
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                "$current/$limit",
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: isAtLimit ? FontWeight.bold : FontWeight.w500,
+                  color: isAtLimit ? Colors.red : Colors.black87,
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 4),
-          // Progress indicator
+          const SizedBox(height: 12),
           ClipRRect(
-            borderRadius: BorderRadius.circular(2),
+            borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
               value: limit > 0 ? current / limit : 0,
-              backgroundColor: Colors.grey[200],
+              backgroundColor: Colors.grey.shade200,
               valueColor: AlwaysStoppedAnimation<Color>(
                 isAtLimit ? Colors.red : colorData.color,
               ),
-              minHeight: 4,
+              minHeight: 6,
             ),
           ),
-          const SizedBox(height: 4),
-          Text(
-            "$current/$limit",
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: isAtLimit ? FontWeight.bold : FontWeight.normal,
-              color: isAtLimit ? Colors.red : Colors.black87,
+          if (isAtLimit && !_isAutoMode) ...[
+            const SizedBox(height: 10),
+            ElevatedButton.icon(
+              onPressed: () => _resetColorCount(colorKey),
+              icon: const Icon(Icons.refresh, size: 16),
+              label: const Text("Đặt lại"),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red.shade100,
+                foregroundColor: Colors.red.shade700,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                minimumSize: const Size(100, 30),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                elevation: 0,
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );
   }
 
+  // Widget to build mode indicator
   Widget _buildModeIndicator() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        color: Colors.white,
+        gradient: LinearGradient(
+          colors: _isAutoMode 
+            ? [Colors.green.shade400, Colors.green.shade600]
+            : [Colors.orange.shade400, Colors.orange.shade600],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+            color: _isAutoMode 
+              ? Colors.green.withOpacity(0.3)
+              : Colors.orange.withOpacity(0.3),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -413,21 +588,21 @@ class _ConveyorSystemState extends State<ConveyorSystem> {
             children: [
               Icon(
                 _isAutoMode ? Icons.auto_mode : Icons.pan_tool,
-                color: _isAutoMode ? Colors.green : Colors.orange,
-                size: 24,
+                color: Colors.white,
+                size: 28,
               ),
               const SizedBox(width: 12),
               Text(
                 "Chế độ: ${_isAutoMode ? 'Tự động' : 'Thủ công'}",
-                style: TextStyle(
-                  fontSize: 18,
+                style: const TextStyle(
+                  fontSize: 20,
                   fontWeight: FontWeight.bold,
-                  color: _isAutoMode ? Colors.green : Colors.orange,
+                  color: Colors.white,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           if (!_isAutoMode)
             _buildColorPreview(),
         ],
@@ -435,6 +610,7 @@ class _ConveyorSystemState extends State<ConveyorSystem> {
     );
   }
 
+  // Widget to build color preview
   Widget _buildColorPreview() {
     try {
       if (_colorDetected.isEmpty) {
@@ -443,12 +619,11 @@ class _ConveyorSystemState extends State<ConveyorSystem> {
           message: "Không phát hiện màu sắc"
         );
       }
-      
-      final color = Color(int.parse(_colorDetected));
       return _ColorDetectionStatus(
-        isValid: true,
-        color: color,
+        isValid: _colorDetected != '0x00000000',
+        color: Color(int.parse(_colorDetected)),
       );
+
     } catch (e) {
       return const _ColorDetectionStatus(
         isValid: false, 
@@ -457,43 +632,65 @@ class _ConveyorSystemState extends State<ConveyorSystem> {
     }
   }
 
-  Widget _buildColorButton(String colorKey) {
-    final colorData = _colorInfo[colorKey]!;
-    return ElevatedButton(
-      onPressed: () => _detectColor(colorKey),
-      style: ElevatedButton.styleFrom(
-        backgroundColor: colorData.color,
-        foregroundColor: 
-          colorKey == "yellow" ? Colors.black : Colors.white,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
-        elevation: 3,
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.colorize, size: 20),
-          const SizedBox(width: 8),
-          Text(
-            "Phát hiện ${colorData.name}",
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-            ),
+  Widget _buildColorButton(ColorLimit colorLimit) {
+    final colorData = _colorInfo[colorLimit]!;
+    final colorKey = _firebaseService.colorLimitToString(colorLimit);
+    final bool isDarkColor = colorLimit == ColorLimit.red || colorLimit == ColorLimit.blue;
+    final bool isAtLimit = (_currentStats[colorKey] ?? 0) >= (_limitStats[colorKey] ?? Config.defaultLimit);
+    
+    return Container(
+      decoration: BoxDecoration(
+        boxShadow: [
+          BoxShadow(
+            color: isAtLimit 
+                ? Colors.grey.withOpacity(0.4) 
+                : colorData.color.withOpacity(0.4),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
           ),
         ],
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: ElevatedButton(
+        onPressed: isAtLimit ? null : () => _detectColor(colorLimit),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: isAtLimit ? Colors.grey.shade400 : colorData.color,
+          foregroundColor: isDarkColor ? Colors.white : Colors.black,
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          elevation: 0,
+          disabledBackgroundColor: Colors.grey.shade300,
+          disabledForegroundColor: Colors.grey.shade700,
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(isAtLimit ? Icons.block : Icons.colorize, size: 22),
+            const SizedBox(width: 10),
+            Text(
+              isAtLimit 
+                  ? "Giới hạn ${colorData.name}"
+                  : "Phát hiện ${colorData.name}",
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
   
+  //Wiget to build limits panel in main widget
   Widget _buildLimitsSection() {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.08),
@@ -508,42 +705,57 @@ class _ConveyorSystemState extends State<ConveyorSystem> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                "Giới hạn màu sắc",
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
+              Row(
+                children: [
+                  Icon(Icons.bar_chart, color: Colors.blue.shade700),
+                  const SizedBox(width: 8),
+                  const Text(
+                    "Giới hạn màu sắc",
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
               ),
-              IconButton(
-                icon: const Icon(Icons.settings_outlined, size: 20),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
+              ElevatedButton.icon(
                 onPressed: _showLimitDialog,
-                tooltip: "Cài đặt giới hạn",
+                icon: const Icon(Icons.settings, size: 18),
+                label: const Text("Cài đặt"),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.grey.shade200,
+                  foregroundColor: Colors.black87,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  elevation: 0,
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           GridView.count(
-            crossAxisCount: 2,
+            crossAxisCount: 3,
             mainAxisSpacing: 12,
             crossAxisSpacing: 12,
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
-            children: _colorInfo.keys.map((colorKey) => _buildLimitInfo(colorKey)).toList(),
+            children: ["red", "blue", "yellow"].map((colorKey) => _buildLimitInfo(colorKey)).toList(),
           ),
         ],
       ),
     );
   }
 
+
+  // Widget to build action buttons in main widget
   Widget _buildActionButtons() {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.08),
@@ -558,28 +770,41 @@ class _ConveyorSystemState extends State<ConveyorSystem> {
           ElevatedButton.icon(
             onPressed: _toggleAutoMode,
             icon: Icon(_isAutoMode ? Icons.toggle_off : Icons.toggle_on),
-            label: Text(_isAutoMode ? "Tắt chế độ tự động" : "Bật chế độ tự động"),
+            label: Text(
+              _isAutoMode ? "Tắt chế độ tự động" : "Bật chế độ tự động",
+              style: const TextStyle(fontSize: 16),
+            ),
             style: ElevatedButton.styleFrom(
               backgroundColor: _isAutoMode ? Colors.red : Colors.green,
               foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 14),
+              padding: const EdgeInsets.symmetric(vertical: 16),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(12),
               ),
+              elevation: 2,
             ),
           ),
           const SizedBox(height: 16),
           
           if (!_isAutoMode) ...[
-            Text(
-              "Chọn màu để phát hiện:",
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
-                color: Colors.grey[800],
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue.shade100),
+              ),
+              child: Text(
+                "Chọn màu để thủ công phân loại:",
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.blue.shade700,
+                ),
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             
             ...colorButtonsSection,
             
@@ -592,14 +817,15 @@ class _ConveyorSystemState extends State<ConveyorSystem> {
                 child: ElevatedButton.icon(
                   onPressed: _resetStats,
                   icon: const Icon(Icons.refresh),
-                  label: const Text("Đặt lại thống kê"),
+                  label: const Text("Đặt lại tất cả", style: TextStyle(fontSize: 15)),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.redAccent,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(12),
                     ),
+                    elevation: 2,
                   ),
                 ),
               ),
@@ -608,14 +834,15 @@ class _ConveyorSystemState extends State<ConveyorSystem> {
                 child: ElevatedButton.icon(
                   onPressed: () => _logout(context),
                   icon: const Icon(Icons.logout),
-                  label: const Text("Đăng xuất"),
+                  label: const Text("Đăng xuất", style: TextStyle(fontSize: 15)),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.grey[800],
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(12),
                     ),
+                    elevation: 2,
                   ),
                 ),
               ),
@@ -626,16 +853,15 @@ class _ConveyorSystemState extends State<ConveyorSystem> {
     );
   }
   
-  // Tạo danh sách các nút màu sắc
+  // Create list of color buttons
   List<Widget> get colorButtonsSection {
     final List<Widget> buttons = [];
-    
-    for (final colorKey in _colorInfo.keys) {
-      buttons.add(_buildColorButton(colorKey));
+    for (final colorLimit in colorKeyMap.entries) {
+      buttons.add(_buildColorButton(colorLimit.key));
       buttons.add(const SizedBox(height: 12));
     }
     
-    // Xóa spacer cuối cùng
+    // Remove last spacer
     if (buttons.isNotEmpty) {
       buttons.removeLast();
     }
@@ -666,30 +892,36 @@ class _ConveyorSystemState extends State<ConveyorSystem> {
                 _buildModeIndicator(),
                 const SizedBox(height: 20),
                 
-                // Hiển thị biểu đồ
+                // Display chart
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(16),
                     boxShadow: [
                       BoxShadow(
                         color: Colors.black.withOpacity(0.08),
                         blurRadius: 8,
                         offset: const Offset(0, 2),
-                      ),
-                    ],
+                      ),],
                   ),
                   child: Column(
                     children: [
-                      const Text(
-                        "Thống kê phân loại màu",
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.pie_chart, color: Colors.purple.shade700, size: 22),
+                          const SizedBox(width: 8),
+                          const Text(
+                            "Thống kê phân loại màu",
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 20),
                       PieChartCircle(
                         colorStats: _getColorStats(),
                       ),
@@ -711,7 +943,9 @@ class _ConveyorSystemState extends State<ConveyorSystem> {
   }
 }
 
-// Widget hiển thị trạng thái phát hiện màu
+
+//======================== Class =========================
+// Widget to display color detection status
 class _ColorDetectionStatus extends StatelessWidget {
   final bool isValid;
   final Color? color;
@@ -728,40 +962,60 @@ class _ColorDetectionStatus extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: isValid ? Colors.green.withOpacity(0.1) : Colors.red.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
+        color: Colors.white.withOpacity(0.8),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isValid ? Colors.green.withOpacity(0.3) : Colors.red.withOpacity(0.3),
+          color: isValid ? Colors.green.withOpacity(0.5) : Colors.red.withOpacity(0.5),
+          width: 1.5,
         ),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
-            isValid ? Icons.check_circle_outline : Icons.error_outline,
+            isValid ? Icons.check_circle : Icons.error,
             color: isValid ? Colors.green : Colors.red,
-            size: 20,
+            size: 22,
           ),
           const SizedBox(width: 12),
           if (isValid && color != null) ...[
             const Text(
               "Màu hiện tại: ",
-              style: TextStyle(fontWeight: FontWeight.w500),
+              style: TextStyle(
+                fontWeight: FontWeight.w500,
+                color: Colors.black87,
+                fontSize: 16,
+              ),
             ),
-            const SizedBox(width: 4),
+            const SizedBox(width: 8),
             Container(
-              width: 24,
-              height: 24,
+              width: 28,
+              height: 28,
               decoration: BoxDecoration(
                 color: color,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.withOpacity(0.5)),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: Colors.white, width: 2),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.2),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],  
+              ),
+            ),
+          ] else if (message != null) ...[
+            Text(
+              message!,
+              style: const TextStyle(
+                color: Colors.red,
+                fontWeight: FontWeight.w500,
               ),
             ),
           ] else ...[
-            Text(
-              message ?? "Lỗi không xác định",
-              style: const TextStyle(
+            const Text(
+              "Lỗi không xác định",
+              style: TextStyle(
                 color: Colors.red,
                 fontWeight: FontWeight.w500,
               ),
@@ -787,3 +1041,4 @@ class ColorInfo {
     required this.colorCode,
   });
 }
+//========================================================
