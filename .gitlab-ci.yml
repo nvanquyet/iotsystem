@@ -1,21 +1,92 @@
-image: cirrusci/flutter:stable
-
 stages:
+  - test
   - build
   - deploy
+
+variables:
+  FLUTTER_VERSION: "stable"
+  FIREBASE_TOKEN: $FIREBASE
+  FIREBASE_APP_ID_ANDROID: $FIREBASE_APP_ID_ANDROID
+  FIREBASE_APP_ID_IOS: $FIREBASE_APP_ID_IOS
+
+# Cache
+cache:
+  paths:
+    - .pub-cache/
 
 before_script:
   - flutter pub get
 
-build_apk:
-  stage: build
+# Stage: test
+unit_test:
+  stage: test
+  image: cirrusci/flutter:$FLUTTER_VERSION
   script:
-    - echo "Building APK..."
-    - chmod +x build.sh   # Cấp quyền chạy file nếu cần
-    - ./build.sh          # Chạy script
+    - flutter test
+
+lint:
+  stage: test
+  image: cirrusci/flutter:$FLUTTER_VERSION
+  script:
+    - flutter analyze
+
+# Stage: build
+build_android:
+  stage: build
+  image: cirrusci/flutter:$FLUTTER_VERSION
+  script:
     - flutter build apk --release
-    - echo "APK built successfully."
   artifacts:
     paths:
       - build/app/outputs/flutter-apk/app-release.apk
     expire_in: 1 week
+  only:
+    - main
+    - develop
+
+# Thêm build_ios nếu cần
+
+# Stage: deploy
+deploy_staging:
+  stage: deploy
+  image: cirrusci/flutter:latest
+  dependencies:
+    - build_android  # Đảm bảo job build_android đã chạy trước đó
+  script:
+    - echo "Deploying to Firebase App Distribution"
+    
+    # Install Firebase CLI
+    - curl -sL https://firebase.tools | bash
+    
+    # Login to Firebase
+    - firebase login:ci --token $FIREBASE_TOKEN
+    
+    # Upload APK to Firebase App Distribution
+    - firebase appdistribution:distribute build/app/outputs/flutter-apk/app-release.apk 
+      --app $FIREBASE_APP_ID_ANDROID
+      --groups "testers,developers"
+      --release-notes "Build từ branch $CI_COMMIT_REF_NAME lúc $(date). Commit: $CI_COMMIT_SHORT_SHA"
+    
+    # Notify success
+    - echo "APK đã được triển khai thành công lên Firebase App Distribution!"
+  environment:
+    name: staging
+    url: https://console.firebase.google.com/project/_/appdistribution/app/$FIREBASE_APP_ID_ANDROID/releases
+  only:
+    - develop  # Chỉ chạy khi có push lên nhánh develop
+
+
+#Deploy production
+deploy_production:
+  stage: deploy
+  image: cirrusci/flutter:latest
+  dependencies:
+    - build_android  
+    - build_ios      
+  script:
+    - echo "Deploying to production environment"
+    
+
+  only:
+    - main 
+  when: manual  

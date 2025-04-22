@@ -1,0 +1,14 @@
+version: '1'
+services:
+  flutter_app:
+    build: .
+    volumes:
+      - .:/app
+      - flutter_cache:/root/.pub-cache
+    network_mode: 'host'
+    # Hoặc exposing ports thay vì network_mode
+    # ports:
+    #   - "8080:8080"
+
+volumes:
+  flutter_cache:

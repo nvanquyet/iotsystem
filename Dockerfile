@@ -1,13 +1,17 @@
 FROM cirrusci/flutter:stable
 
-# Cài đặt Android SDK tools
-ENV ANDROID_SDK_ROOT="/opt/android-sdk"
-RUN yes | sdkmanager --licenses
-
-# Thêm biến môi trường cho PATH
-ENV PATH="$PATH:/opt/flutter/bin:/opt/flutter/bin/cache/dart-sdk/bin"
-
 WORKDIR /app
-COPY . .
+
+COPY pubspec.* ./
 
 RUN flutter pub get
+
+COPY . .
+
+RUN flutter build apk --release
+
+
+# RUN flutter build ios --release --no-codesign
+# EXPOSE 8080
+# Tùy chọn: Command mặc định khi chạy container
+# CMD ["flutter", "run", "--release"]
