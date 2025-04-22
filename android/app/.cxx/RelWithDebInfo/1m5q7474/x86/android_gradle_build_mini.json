@@ -1,0 +1,20 @@
+{
+  "buildFiles": [
+    "C:\\Users\\nvanq\\fvm\\versions\\stable\\packages\\flutter_tools\\gradle\\src\\main\\groovy\\CMakeLists.txt"
+  ],
+  "cleanCommandsComponents": [
+    [
+      "E:\\Env\\AndroidSDK\\cmake\\3.22.1\\bin\\ninja.exe",
+      "-C",
+      "W:\\Fourth_Years\\IotRealtime\\iotsystem\\android\\app\\.cxx\\RelWithDebInfo\\1m5q7474\\x86",
+      "clean"
+    ]
+  ],
+  "buildTargetsCommandComponents": [
+    "E:\\Env\\AndroidSDK\\cmake\\3.22.1\\bin\\ninja.exe",
+    "-C",
+    "W:\\Fourth_Years\\IotRealtime\\iotsystem\\android\\app\\.cxx\\RelWithDebInfo\\1m5q7474\\x86",
+    "{LIST_OF_TARGETS_TO_BUILD}"
+  ],
+  "libraries": {}
+}

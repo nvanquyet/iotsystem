@@ -1,92 +1,44 @@
 stages:
-  - test
   - build
+  - dockerize
   - deploy
 
 variables:
   FLUTTER_VERSION: "stable"
-  FIREBASE_TOKEN: $FIREBASE
-  FIREBASE_APP_ID_ANDROID: $FIREBASE_APP_ID_ANDROID
-  FIREBASE_APP_ID_IOS: $FIREBASE_APP_ID_IOS
+  DOCKER_IMAGE: registry.gitlab.com/<YOUR_USERNAME>/<YOUR_PROJECT_NAME>:latest
 
-# Cache
-cache:
-  paths:
-    - .pub-cache/
-
-before_script:
-  - flutter pub get
-
-# Stage: test
-unit_test:
-  stage: test
-  image: cirrusci/flutter:$FLUTTER_VERSION
-  script:
-    - flutter test
-
-lint:
-  stage: test
-  image: cirrusci/flutter:$FLUTTER_VERSION
-  script:
-    - flutter analyze
-
-# Stage: build
-build_android:
+# Build Flutter Web
+build_flutter_web:
   stage: build
   image: cirrusci/flutter:$FLUTTER_VERSION
   script:
-    - flutter build apk --release
+    - flutter pub get
+    - flutter build web
   artifacts:
     paths:
-      - build/app/outputs/flutter-apk/app-release.apk
-    expire_in: 1 week
+      - build/web
+    expire_in: 1 hour
+
+# Build Docker image
+docker_build:
+  stage: dockerize
+  image: docker:latest
+  services:
+    - docker:dind
+  script:
+    - docker build -t $DOCKER_IMAGE .
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin $CI_REGISTRY
+    - docker push $DOCKER_IMAGE
   only:
     - main
-    - develop
-
-# Thêm build_ios nếu cần
-
-# Stage: deploy
-deploy_staging:
-  stage: deploy
-  image: cirrusci/flutter:latest
   dependencies:
-    - build_android  # Đảm bảo job build_android đã chạy trước đó
-  script:
-    - echo "Deploying to Firebase App Distribution"
-    
-    # Install Firebase CLI
-    - curl -sL https://firebase.tools | bash
-    
-    # Login to Firebase
-    - firebase login:ci --token $FIREBASE_TOKEN
-    
-    # Upload APK to Firebase App Distribution
-    - firebase appdistribution:distribute build/app/outputs/flutter-apk/app-release.apk 
-      --app $FIREBASE_APP_ID_ANDROID
-      --groups "testers,developers"
-      --release-notes "Build từ branch $CI_COMMIT_REF_NAME lúc $(date). Commit: $CI_COMMIT_SHORT_SHA"
-    
-    # Notify success
-    - echo "APK đã được triển khai thành công lên Firebase App Distribution!"
-  environment:
-    name: staging
-    url: https://console.firebase.google.com/project/_/appdistribution/app/$FIREBASE_APP_ID_ANDROID/releases
-  only:
-    - develop  # Chỉ chạy khi có push lên nhánh develop
+    - build_flutter_web
 
-
-#Deploy production
-deploy_production:
+# Optional: Deploy step (if you have a server or runner to deploy)
+deploy:
   stage: deploy
-  image: cirrusci/flutter:latest
-  dependencies:
-    - build_android  
-    - build_ios      
   script:
-    - echo "Deploying to production environment"
-    
-
+    - echo "Implement deployment step here (e.g., SSH to server, run docker pull & restart)"
   only:
-    - main 
-  when: manual  
+    - main
+  when: manual

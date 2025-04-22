@@ -1,3 +1,4 @@
+import 'package:convenyor_system/Widgets/EnhancedStatsChart.dart';
 import 'package:convenyor_system/config.dart';
 import 'package:convenyor_system/screens/login_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -385,48 +386,6 @@ class _ConveyorSystemState extends State<ConveyorSystem> {
         );
       },
     );
-  }
-
-  // Convert stats to ColorStats list
-  List<ColorStats> _getColorStats() {
-    final total = (_stats["total"] ?? 0) > 0 ? _stats["total"] : 1;
-
-    Map<ColorLimit, double> percentages = {};
-    double totalPercentage = 0;
-    
-    // Calculate percentage for each color
-    for (final entry in colorKeyMap.entries) {
-      final colorLimit = entry.key;
-      final dbKey = entry.value;
-      final percentage = (_stats[dbKey] ?? 0) * 100.0 / total;
-      percentages[colorLimit] = percentage;
-      totalPercentage += percentage;
-    }
-    
-    // If no data
-    if (totalPercentage == 0) {
-      final defaultValue = 100.0 / _colorInfo.length;
-      return _colorInfo.entries.map((entry) => 
-        ColorStats(entry.value.colorCode, _stats[colorKeyMap[entry.key]] ?? 0, defaultValue)
-      ).toList();
-    }
-    
-    // Adjust ratio to total exactly 100%
-    if (totalPercentage != 100.0) {
-      final factor = 100.0 / totalPercentage;
-      for (final colorKey in percentages.keys) {
-        percentages[colorKey] = percentages[colorKey]! * factor;
-      }
-    }
-    
-    // Convert to ColorStats list
-    return _colorInfo.entries.map((entry) {
-      final colorLimit = entry.key;
-      final colorData = entry.value;
-      final dbKey = colorKeyMap[colorLimit]!;
-      final adjustedPercentage = double.parse(percentages[colorLimit]!.toStringAsFixed(2));
-      return ColorStats(colorData.colorCode, _stats[dbKey] ?? 0, adjustedPercentage);
-    }).toList();
   }
 
   // Wiget to build limit input field 
@@ -892,42 +851,47 @@ class _ConveyorSystemState extends State<ConveyorSystem> {
                 _buildModeIndicator(),
                 const SizedBox(height: 20),
                 
-                // Display chart
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.08),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),],
-                  ),
-                  child: Column(
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.pie_chart, color: Colors.purple.shade700, size: 22),
-                          const SizedBox(width: 8),
-                          const Text(
-                            "Thống kê phân loại màu",
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 20),
-                      PieChartCircle(
-                        colorStats: _getColorStats(),
-                      ),
-                    ],
-                  ),
+               // Display chart
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.08),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.pie_chart, color: Colors.purple.shade700, size: 22),
+                        const SizedBox(width: 8),
+                        const Text(
+                          "Thống kê phân loại màu",
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    // Thay thế PieChartCircle bằng biểu đồ mới
+                    EnhancedStatsChart(
+                      stats: _stats,
+                      currentStats: _currentStats,
+                      limitStats: _limitStats,
+                      colorInfo: _colorInfo,
+                    ),
+                  ],
+                ),
+              ),
                 const SizedBox(height: 20),
                 
                 _buildLimitsSection(),
